@@ -158,6 +158,54 @@ async def _handle_stop_analysis(
     ]
 
 
+async def _handle_create_directory(
+    workflows: FormationWorkflows, arguments: dict
+) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Handle create_directory tool call."""
+    result = await workflows.client.put_data(
+        path=arguments["path"],
+        resource_type="directory",
+        metadata=arguments.get("metadata"),
+    )
+
+    output = f"✅ Directory created: `{result['path']}`"
+    return [types.TextContent(type="text", text=output)]
+
+
+async def _handle_upload_file(
+    workflows: FormationWorkflows, arguments: dict
+) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Handle upload_file tool call."""
+    content = arguments["content"]
+    # Convert string content to bytes
+    content_bytes = content.encode("utf-8") if isinstance(content, str) else content
+
+    result = await workflows.client.put_data(
+        path=arguments["path"],
+        content=content_bytes,
+        metadata=arguments.get("metadata"),
+    )
+
+    created_msg = "created" if result.get("created") else "updated"
+    output = f"✅ File {created_msg}: `{result['path']}`"
+    return [types.TextContent(type="text", text=output)]
+
+
+async def _handle_set_metadata(
+    workflows: FormationWorkflows, arguments: dict
+) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Handle set_metadata tool call."""
+    result = await workflows.client.put_data(
+        path=arguments["path"],
+        metadata=arguments["metadata"],
+        replace_metadata=arguments.get("replace", False),
+    )
+
+    replace_msg = "replaced" if arguments.get("replace") else "updated"
+    output = f"✅ Metadata {replace_msg} for: `{result['path']}`"
+    return [types.TextContent(type="text", text=output)]
+
+
 async def _handle_browse_data(
     workflows: FormationWorkflows, arguments: dict
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
@@ -390,6 +438,90 @@ async def serve() -> None:
                     "required": ["path"],
                 },
             ),
+            types.Tool(
+                name="create_directory",
+                description="Create a new directory in the iRODS data store",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": (
+                                "Full iRODS path for the new directory "
+                                "(e.g., '/iplant/home/username/newdir')"
+                            ),
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "description": (
+                                "Optional metadata as key-value pairs "
+                                "(e.g., {'author': 'username', 'project': 'myproject'})"
+                            ),
+                        },
+                    },
+                    "required": ["path"],
+                },
+            ),
+            types.Tool(
+                name="upload_file",
+                description="Upload a file to the iRODS data store",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": (
+                                "Full iRODS path for the file "
+                                "(e.g., '/iplant/home/username/file.txt')"
+                            ),
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "File content as a string",
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "description": (
+                                "Optional metadata as key-value pairs "
+                                "(e.g., {'author': 'username', 'filetype': 'text'})"
+                            ),
+                        },
+                    },
+                    "required": ["path", "content"],
+                },
+            ),
+            types.Tool(
+                name="set_metadata",
+                description="Set or update metadata on an existing file or directory",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": (
+                                "Full iRODS path to file or directory "
+                                "(e.g., '/iplant/home/username/file.txt')"
+                            ),
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "description": (
+                                "Metadata as key-value pairs "
+                                "(e.g., {'author': 'username', 'version': '1.0'})"
+                            ),
+                        },
+                        "replace": {
+                            "type": "boolean",
+                            "description": (
+                                "If true, replace all existing metadata. "
+                                "If false, add to existing metadata (default: false)"
+                            ),
+                            "default": False,
+                        },
+                    },
+                    "required": ["path", "metadata"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -412,6 +544,12 @@ async def serve() -> None:
                 return await _handle_stop_analysis(workflows, arguments)
             elif name == "browse_data":
                 return await _handle_browse_data(workflows, arguments)
+            elif name == "create_directory":
+                return await _handle_create_directory(workflows, arguments)
+            elif name == "upload_file":
+                return await _handle_upload_file(workflows, arguments)
+            elif name == "set_metadata":
+                return await _handle_set_metadata(workflows, arguments)
             else:
                 return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
 

@@ -21,7 +21,7 @@ async def test_browse_directory(client: FormationClient, httpx_mock: HTTPXMock):
     test_path = "/iplant/home/testuser"
 
     httpx_mock.add_response(
-        url=f"https://formation.test/data/browse/{test_path.lstrip('/')}",
+        url=f"https://formation.test/data/{test_path.lstrip('/')}",
         json={
             "path": test_path,
             "type": "collection",
@@ -48,7 +48,7 @@ async def test_browse_empty_directory(client: FormationClient, httpx_mock: HTTPX
     test_path = "/iplant/home/testuser/empty"
 
     httpx_mock.add_response(
-        url=f"https://formation.test/data/browse/{test_path.lstrip('/')}",
+        url=f"https://formation.test/data/{test_path.lstrip('/')}",
         json={
             "path": test_path,
             "type": "collection",
@@ -70,7 +70,7 @@ async def test_read_text_file(client: FormationClient, httpx_mock: HTTPXMock):
     file_content = "Hello, world!"
 
     httpx_mock.add_response(
-        url=f"https://formation.test/data/browse/{test_path.lstrip('/')}",
+        url=f"https://formation.test/data/{test_path.lstrip('/')}",
         content=file_content.encode("utf-8"),
         headers={"content-type": "text/plain"},
     )
@@ -90,7 +90,7 @@ async def test_read_file_with_offset_and_limit(
     file_content = "Hello, world!"
 
     httpx_mock.add_response(
-        url=f"https://formation.test/data/browse/{test_path.lstrip('/')}?limit=5",
+        url=f"https://formation.test/data/{test_path.lstrip('/')}?limit=5",
         content=file_content.encode("utf-8"),
         headers={"content-type": "text/plain"},
     )
@@ -106,7 +106,7 @@ async def test_browse_with_metadata(client: FormationClient, httpx_mock: HTTPXMo
     test_path = "/iplant/home/testuser"
 
     httpx_mock.add_response(
-        url=f"https://formation.test/data/browse/{test_path.lstrip('/')}?include_metadata=true",
+        url=f"https://formation.test/data/{test_path.lstrip('/')}?include_metadata=true",
         json={
             "path": test_path,
             "type": "collection",
@@ -131,7 +131,7 @@ async def test_read_file_with_metadata(client: FormationClient, httpx_mock: HTTP
     file_content = "Hello, world!"
 
     httpx_mock.add_response(
-        url=f"https://formation.test/data/browse/{test_path.lstrip('/')}?include_metadata=true",
+        url=f"https://formation.test/data/{test_path.lstrip('/')}?include_metadata=true",
         content=file_content.encode("utf-8"),
         headers={
             "content-type": "text/plain",
@@ -146,3 +146,115 @@ async def test_read_file_with_metadata(client: FormationClient, httpx_mock: HTTP
     assert "headers" in result
     assert "x-datastore-size" in result["headers"]
     assert result["headers"]["x-datastore-size"] == "13"
+
+
+@pytest.mark.asyncio
+async def test_create_directory(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test creating a directory."""
+    test_path = "/iplant/home/testuser/newdir"
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}?resource_type=directory",
+        json={
+            "path": test_path,
+            "type": "collection",
+            "created": True,
+        },
+        method="PUT",
+    )
+
+    result = await client.put_data(test_path, resource_type="directory")
+
+    assert result["path"] == test_path
+    assert result["type"] == "collection"
+    assert result["created"] is True
+
+
+@pytest.mark.asyncio
+async def test_upload_file(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test uploading a file."""
+    test_path = "/iplant/home/testuser/newfile.txt"
+    content = b"Test file content"
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}",
+        json={
+            "path": test_path,
+            "type": "data_object",
+            "created": True,
+        },
+        method="PUT",
+    )
+
+    result = await client.put_data(test_path, content=content)
+
+    assert result["path"] == test_path
+    assert result["type"] == "data_object"
+    assert result["created"] is True
+
+
+@pytest.mark.asyncio
+async def test_upload_file_with_metadata(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test uploading a file with metadata."""
+    test_path = "/iplant/home/testuser/newfile.txt"
+    content = b"Test file content"
+    metadata = {"author": "testuser", "project": "test"}
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}",
+        json={
+            "path": test_path,
+            "type": "data_object",
+            "created": True,
+        },
+        method="PUT",
+    )
+
+    result = await client.put_data(test_path, content=content, metadata=metadata)
+
+    assert result["path"] == test_path
+    assert result["created"] is True
+
+
+@pytest.mark.asyncio
+async def test_set_metadata(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test setting metadata on an existing path."""
+    test_path = "/iplant/home/testuser/file.txt"
+    metadata = {"author": "testuser", "version": "1.0"}
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}",
+        json={
+            "path": test_path,
+            "type": "data_object",
+            "created": False,
+        },
+        method="PUT",
+    )
+
+    result = await client.put_data(test_path, metadata=metadata)
+
+    assert result["path"] == test_path
+    assert result["created"] is False
+
+
+@pytest.mark.asyncio
+async def test_replace_metadata(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test replacing metadata on an existing path."""
+    test_path = "/iplant/home/testuser/file.txt"
+    metadata = {"author": "newuser"}
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}?replace_metadata=true",
+        json={
+            "path": test_path,
+            "type": "data_object",
+            "created": False,
+        },
+        method="PUT",
+    )
+
+    result = await client.put_data(test_path, metadata=metadata, replace_metadata=True)
+
+    assert result["path"] == test_path
+    assert result["created"] is False

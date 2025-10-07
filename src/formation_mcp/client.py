@@ -292,7 +292,7 @@ class FormationClient:
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(
-                f"{self.base_url}/data/browse/{url_path}",
+                f"{self.base_url}/data/{url_path}",
                 headers=self.headers,
                 params=params,
             )
@@ -312,3 +312,54 @@ class FormationClient:
                     if k.lower().startswith("x-datastore-")
                 }
                 return {"content": response.content, "headers": metadata_headers}
+
+    async def put_data(
+        self,
+        path: str,
+        content: bytes | None = None,
+        resource_type: str | None = None,
+        metadata: dict[str, str] | None = None,
+        replace_metadata: bool = False,
+        avu_delimiter: str = ",",
+    ) -> dict[str, Any]:
+        """Create directory, upload file, or set metadata on iRODS path.
+
+        Args:
+            path: iRODS path (directory or file)
+            content: File content as bytes (optional)
+            resource_type: "directory" to create a directory without content
+            metadata: Dict mapping attribute names to values (or "value,units" strings)
+            replace_metadata: If True, replace existing metadata instead of adding
+            avu_delimiter: Delimiter for separating value and units (default: ',')
+
+        Returns:
+            Dictionary with path, type, and created status
+        """
+        await self._ensure_token()
+
+        params: dict[str, Any] = {}
+        if resource_type:
+            params["resource_type"] = resource_type
+        if replace_metadata:
+            params["replace_metadata"] = "true"
+        if avu_delimiter != ",":
+            params["avu_delimiter"] = avu_delimiter
+
+        # Build headers with metadata
+        headers = dict(self.headers)  # Start with auth headers
+        if metadata:
+            for attribute, value in metadata.items():
+                headers[f"X-Datastore-{attribute}"] = value
+
+        # Remove leading slash if present for the URL path
+        url_path = path.lstrip("/")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.put(
+                f"{self.base_url}/data/{url_path}",
+                headers=headers,
+                params=params,
+                content=content if content else b"",
+            )
+            response.raise_for_status()
+            return response.json()
