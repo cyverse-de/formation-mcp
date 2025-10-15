@@ -23,10 +23,10 @@ async def test_launch_and_wait_immediate_url(
     app_id = "app-123"
     analysis_id = "analysis-456"
 
-    # Mock app config with no required parameters
+    # Mock app config with no required parameters (interactive app)
     httpx_mock.add_response(
-        url=f"https://formation.test/apps/de/{app_id}/config",
-        json={"groups": []},
+        url=f"https://formation.test/apps/de/{app_id}/parameters",
+        json={"groups": [], "overall_job_type": "Interactive"},
     )
 
     # Mock launch response
@@ -66,10 +66,10 @@ async def test_launch_and_wait_with_polling(
     app_id = "app-123"
     analysis_id = "analysis-456"
 
-    # Mock app config with no required parameters
+    # Mock app config with no required parameters (interactive app)
     httpx_mock.add_response(
-        url=f"https://formation.test/apps/de/{app_id}/config",
-        json={"groups": []},
+        url=f"https://formation.test/apps/de/{app_id}/parameters",
+        json={"groups": [], "overall_job_type": "Interactive"},
     )
 
     # Mock launch response without URL
@@ -114,6 +114,41 @@ async def test_launch_and_wait_with_polling(
 
 
 @pytest.mark.asyncio
+async def test_launch_and_wait_batch_job(
+    workflows: FormationWorkflows, httpx_mock: HTTPXMock
+):
+    """Test launch and wait with a batch job (non-interactive)."""
+    app_id = "app-123"
+    analysis_id = "analysis-789"
+
+    # Mock app config for batch job (no required parameters, DE job type)
+    httpx_mock.add_response(
+        url=f"https://formation.test/apps/de/{app_id}/parameters",
+        json={"groups": [], "overall_job_type": "DE"},
+    )
+
+    # Mock launch response
+    httpx_mock.add_response(
+        url=f"https://formation.test/app/launch/de/{app_id}",
+        json={
+            "analysis_id": analysis_id,
+            "name": "Test Batch Job",
+            "status": "Submitted",
+        },
+        method="POST",
+    )
+
+    result = await workflows.launch_and_wait(app_id=app_id, max_wait=10)
+
+    # For batch jobs, should return immediately without waiting for URL
+    assert result["analysis_id"] == analysis_id
+    assert result["status"] == "submitted"
+    assert result["job_type"] == "DE"
+    assert "url" not in result
+    assert "wait_time" not in result
+
+
+@pytest.mark.asyncio
 async def test_launch_and_wait_with_required_params(
     workflows: FormationWorkflows, httpx_mock: HTTPXMock
 ):
@@ -122,7 +157,7 @@ async def test_launch_and_wait_with_required_params(
 
     # Mock app config with required parameters
     httpx_mock.add_response(
-        url=f"https://formation.test/apps/de/{app_id}/config",
+        url=f"https://formation.test/apps/de/{app_id}/parameters",
         json={
             "groups": [
                 {

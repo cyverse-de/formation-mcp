@@ -258,3 +258,131 @@ async def test_replace_metadata(client: FormationClient, httpx_mock: HTTPXMock):
 
     assert result["path"] == test_path
     assert result["created"] is False
+
+
+@pytest.mark.asyncio
+async def test_delete_file(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test deleting a file."""
+    test_path = "/iplant/home/testuser/file.txt"
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}",
+        json={
+            "path": test_path,
+            "type": "data_object",
+            "would_delete": True,
+            "deleted": True,
+            "dry_run": False,
+        },
+        method="DELETE",
+    )
+
+    result = await client.delete_data(test_path)
+
+    assert result["path"] == test_path
+    assert result["deleted"] is True
+    assert result["dry_run"] is False
+
+
+@pytest.mark.asyncio
+async def test_delete_file_dry_run(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test dry-run file deletion."""
+    test_path = "/iplant/home/testuser/file.txt"
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}?dry_run=true",
+        json={
+            "path": test_path,
+            "type": "data_object",
+            "would_delete": True,
+            "deleted": False,
+            "dry_run": True,
+        },
+        method="DELETE",
+    )
+
+    result = await client.delete_data(test_path, dry_run=True)
+
+    assert result["path"] == test_path
+    assert result["would_delete"] is True
+    assert result["deleted"] is False
+    assert result["dry_run"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_empty_directory(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test deleting an empty directory."""
+    test_path = "/iplant/home/testuser/emptydir"
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}",
+        json={
+            "path": test_path,
+            "type": "collection",
+            "would_delete": True,
+            "deleted": True,
+            "dry_run": False,
+        },
+        method="DELETE",
+    )
+
+    result = await client.delete_data(test_path)
+
+    assert result["path"] == test_path
+    assert result["deleted"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_directory_with_recurse(
+    client: FormationClient, httpx_mock: HTTPXMock
+):
+    """Test deleting a non-empty directory with recurse."""
+    test_path = "/iplant/home/testuser/folder"
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}?recurse=true",
+        json={
+            "path": test_path,
+            "type": "collection",
+            "would_delete": True,
+            "deleted": True,
+            "dry_run": False,
+            "item_count": 15,
+        },
+        method="DELETE",
+    )
+
+    result = await client.delete_data(test_path, recurse=True)
+
+    assert result["path"] == test_path
+    assert result["deleted"] is True
+    assert result["item_count"] == 15
+
+
+@pytest.mark.asyncio
+async def test_delete_directory_dry_run_with_recurse(
+    client: FormationClient, httpx_mock: HTTPXMock
+):
+    """Test dry-run directory deletion with recurse."""
+    test_path = "/iplant/home/testuser/folder"
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/data/{test_path.lstrip('/')}?recurse=true&dry_run=true",
+        json={
+            "path": test_path,
+            "type": "collection",
+            "would_delete": True,
+            "deleted": False,
+            "dry_run": True,
+            "item_count": 15,
+        },
+        method="DELETE",
+    )
+
+    result = await client.delete_data(test_path, recurse=True, dry_run=True)
+
+    assert result["path"] == test_path
+    assert result["would_delete"] is True
+    assert result["deleted"] is False
+    assert result["dry_run"] is True
+    assert result["item_count"] == 15

@@ -48,6 +48,7 @@ async def _handle_launch_app_and_wait(
         name=arguments.get("name"),
         max_wait=arguments.get("max_wait", 300),
         config=arguments.get("config"),
+        overall_job_type=arguments.get("overall_job_type"),
     )
 
     # Check if we need to ask for missing parameters
@@ -71,17 +72,23 @@ async def _handle_launch_app_and_wait(
 
         return [types.TextContent(type="text", text=output)]
 
-    # Open browser automatically if URL is ready
+    # Format output based on whether it's an interactive app or batch job
     url = result.get("url")
-    if url:
-        workflows.open_in_browser(url)
 
     output = "✅ Analysis launched successfully!\n\n"
     output += f"**Analysis ID:** `{result['analysis_id']}`\n"
-    output += f"**URL:** {result['url']}\n"
     output += f"**Status:** {result['status']}\n"
-    output += f"**Wait time:** {result['wait_time']}s\n"
-    output += "\n🌐 Opened in browser\n"
+
+    # Interactive apps have URLs
+    if url:
+        workflows.open_in_browser(url)
+        output += f"**URL:** {result['url']}\n"
+        output += f"**Wait time:** {result['wait_time']}s\n"
+        output += "\n🌐 Opened in browser\n"
+    # Batch jobs just show the job type
+    elif "job_type" in result:
+        output += f"**Job Type:** {result['job_type']}\n"
+        output += "\n📋 Batch job submitted - check status later\n"
 
     return [types.TextContent(type="text", text=output)]
 
@@ -102,9 +109,10 @@ async def _handle_get_analysis_status(
 
 
 async def _handle_list_running_analyses(
-    workflows: FormationWorkflows, arguments: dict
+    workflows: FormationWorkflows, _arguments: dict
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
     """Handle list_running_analyses tool call."""
+    del _arguments  # Unused but required by handler signature
     analyses = await workflows.get_running_analyses()
     if not analyses:
         return [types.TextContent(type="text", text="No running analyses found")]
@@ -115,6 +123,52 @@ async def _handle_list_running_analyses(
         output += f"  App: {analysis.get('app_id')}\n"
         output += f"  System: {analysis.get('system_id')}\n"
         output += f"  Status: {analysis.get('status')}\n\n"
+
+    return [types.TextContent(type="text", text=output)]
+
+
+async def _handle_get_app_parameters(
+    workflows: FormationWorkflows, arguments: dict
+) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Handle get_app_parameters tool call."""
+    result = await workflows.client.get_app_parameters(
+        arguments["app_id"],
+        arguments.get("system_id", "de"),
+    )
+
+    output = f"**App Parameters: {arguments['app_id']}**\n\n"
+
+    # Show job type if available
+    if "overall_job_type" in result:
+        output += f"**Job Type:** {result['overall_job_type']}\n\n"
+
+    # Extract and display required parameters
+    required_params = []
+    optional_params = []
+
+    for group in result.get("groups", []):
+        for param in group.get("parameters", []):
+            is_visible = param.get("isVisible", True)
+            is_required = param.get("required", False)
+
+            if is_visible and is_required:
+                required_params.append(param)
+            elif is_visible:
+                optional_params.append(param)
+
+    if required_params:
+        output += "**Required Parameters:**\n"
+        for param in required_params:
+            output += f"- `{param['id']}` ({param.get('type', 'string')})\n"
+            output += f"  {param.get('description', 'No description')}\n"
+            if "defaultValue" in param:
+                output += f"  Default: {param['defaultValue']}\n"
+            output += "\n"
+    else:
+        output += "**No required parameters**\n\n"
+
+    if optional_params:
+        output += f"**Optional Parameters:** {len(optional_params)} available\n"
 
     return [types.TextContent(type="text", text=output)]
 
@@ -203,6 +257,43 @@ async def _handle_set_metadata(
 
     replace_msg = "replaced" if arguments.get("replace") else "updated"
     output = f"✅ Metadata {replace_msg} for: `{result['path']}`"
+    return [types.TextContent(type="text", text=output)]
+
+
+async def _handle_delete_data(
+    workflows: FormationWorkflows, arguments: dict
+) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+    """Handle delete_data tool call."""
+    result = await workflows.client.delete_data(
+        path=arguments["path"],
+        recurse=arguments.get("recurse", False),
+        dry_run=arguments.get("dry_run", False),
+    )
+
+    # Format output based on dry_run status
+    if result.get("dry_run"):
+        # Dry-run output
+        icon = "🔍"
+        action = "Would delete" if result.get("would_delete") else "Cannot delete"
+        output = f"{icon} Dry-run: {action} `{result['path']}`"
+        if result.get("type") == "collection" and result.get("item_count"):
+            output += f" ({result['item_count']} items)"
+    else:
+        # Actual deletion output
+        if result.get("deleted"):
+            icon = "✅"
+            action = "Deleted"
+            if arguments.get("recurse") and result.get("type") == "collection":
+                icon = "⚠️"
+                action = "Deleted (recursive)"
+        else:
+            icon = "❌"
+            action = "Failed to delete"
+
+        output = f"{icon} {action}: `{result['path']}`"
+        if result.get("item_count"):
+            output += f" ({result['item_count']} items)"
+
     return [types.TextContent(type="text", text=output)]
 
 
@@ -343,6 +434,14 @@ async def serve() -> None:
                             "type": "object",
                             "description": "Configuration parameters required by the app",
                         },
+                        "overall_job_type": {
+                            "type": "string",
+                            "description": (
+                                "Job type from list_apps (optional). If provided from a "
+                                "previous list_apps call, avoids an extra API request. "
+                                "Values: 'Interactive', 'DE', 'OSG', 'Tapis'"
+                            ),
+                        },
                     },
                     "required": ["app_id"],
                 },
@@ -367,6 +466,29 @@ async def serve() -> None:
                 inputSchema={
                     "type": "object",
                     "properties": {},
+                },
+            ),
+            types.Tool(
+                name="get_app_parameters",
+                description=(
+                    "Get the parameters for a specific app, including required parameters, "
+                    "parameter types, and default values. Use this to check what parameters "
+                    "an app needs before launching it."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "app_id": {
+                            "type": "string",
+                            "description": "UUID of the app",
+                        },
+                        "system_id": {
+                            "type": "string",
+                            "description": "System identifier (default: 'de')",
+                            "default": "de",
+                        },
+                    },
+                    "required": ["app_id"],
                 },
             ),
             types.Tool(
@@ -522,6 +644,44 @@ async def serve() -> None:
                     "required": ["path", "metadata"],
                 },
             ),
+            types.Tool(
+                name="delete_data",
+                description=(
+                    "Delete a file or directory from the iRODS data store. "
+                    "Supports dry-run mode to preview deletion without executing. "
+                    "**Safety:** Deletions are permanent. Consider using dry_run=true first."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": (
+                                "Full iRODS path to delete "
+                                "(e.g., '/iplant/home/username/file.txt' or "
+                                "'/iplant/home/username/directory')"
+                            ),
+                        },
+                        "recurse": {
+                            "type": "boolean",
+                            "description": (
+                                "Delete non-empty directories. "
+                                "Default is false for safety."
+                            ),
+                            "default": False,
+                        },
+                        "dry_run": {
+                            "type": "boolean",
+                            "description": (
+                                "Preview what would be deleted without actually deleting. "
+                                "Highly recommended before actual deletion."
+                            ),
+                            "default": False,
+                        },
+                    },
+                    "required": ["path"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -538,6 +698,8 @@ async def serve() -> None:
                 return await _handle_get_analysis_status(workflows, arguments)
             elif name == "list_running_analyses":
                 return await _handle_list_running_analyses(workflows, arguments)
+            elif name == "get_app_parameters":
+                return await _handle_get_app_parameters(workflows, arguments)
             elif name == "open_in_browser":
                 return _handle_open_in_browser(workflows, arguments)
             elif name == "stop_analysis":
@@ -550,6 +712,8 @@ async def serve() -> None:
                 return await _handle_upload_file(workflows, arguments)
             elif name == "set_metadata":
                 return await _handle_set_metadata(workflows, arguments)
+            elif name == "delete_data":
+                return await _handle_delete_data(workflows, arguments)
             else:
                 return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
 

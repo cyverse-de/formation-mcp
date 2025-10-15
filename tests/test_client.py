@@ -70,6 +70,38 @@ async def test_launch_app(client: FormationClient, httpx_mock: HTTPXMock):
 
 
 @pytest.mark.asyncio
+async def test_get_app_parameters(client: FormationClient, httpx_mock: HTTPXMock):
+    """Test getting app parameters."""
+    app_id = "app-123"
+
+    httpx_mock.add_response(
+        url=f"https://formation.test/apps/de/{app_id}/parameters",
+        json={
+            "overall_job_type": "DE",
+            "groups": [
+                {
+                    "parameters": [
+                        {
+                            "id": "input_file",
+                            "name": "Input File",
+                            "description": "File to process",
+                            "type": "FileInput",
+                            "required": True,
+                            "isVisible": True,
+                        }
+                    ]
+                }
+            ],
+        },
+    )
+
+    result = await client.get_app_parameters(app_id)
+    assert result["overall_job_type"] == "DE"
+    assert len(result["groups"]) == 1
+    assert len(result["groups"][0]["parameters"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_get_analysis_status(client: FormationClient, httpx_mock: HTTPXMock):
     """Test getting analysis status."""
     analysis_id = "analysis-456"

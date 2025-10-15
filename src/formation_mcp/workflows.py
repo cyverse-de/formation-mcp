@@ -41,6 +41,7 @@ class FormationWorkflows:
         max_wait: int = 300,
         poll_interval: int = 5,
         config: dict[str, Any] | None = None,
+        overall_job_type: str | None = None,
     ) -> dict[str, Any]:
         """Launch an app and wait for it to become ready.
 
@@ -51,38 +52,58 @@ class FormationWorkflows:
             max_wait: Maximum seconds to wait for readiness (default: 300)
             poll_interval: Seconds between status polls (default: 5)
             config: Launch configuration including required parameters
+            overall_job_type: Job type from list_apps (optional).
+                             If provided, skips parameter fetch.
+                             Can be: "Interactive" (VICE), "DE" (batch), "OSG", or "Tapis"
 
         Returns:
-            Dictionary with analysis_id, url, status, and wait_time, or
+            Dictionary with analysis_id, url, status, and wait_time (for interactive apps), or
+            Dictionary with analysis_id and status (for batch jobs), or
             Dictionary with missing_params and config_template if params needed
 
         Raises:
-            TimeoutError: If app doesn't become ready within max_wait seconds
+            TimeoutError: If interactive app doesn't become ready within max_wait seconds
             httpx.HTTPStatusError: If API requests fail
         """
-        # Get app configuration to check for required parameters
-        app_config = await self.client.get_app_config(app_id, system_id)
+        # If overall_job_type is provided, skip parameter fetch and validation
+        # Otherwise, get app configuration to check for required parameters and job type
+        if overall_job_type is None:
+            app_config = await self.client.get_app_parameters(app_id, system_id)
 
-        # Check if there are required parameters
-        missing_params = self._check_required_params(app_config, config or {})
+            # Check if there are required parameters
+            missing_params = self._check_required_params(app_config, config or {})
 
-        if missing_params:
-            return {
-                "missing_params": missing_params,
-                "config_template": app_config,
-            }
+            if missing_params:
+                return {
+                    "missing_params": missing_params,
+                    "config_template": app_config,
+                }
+
+            job_type = app_config.get("overall_job_type", "")
+        else:
+            job_type = overall_job_type
+
+        # Determine if this is an interactive/VICE app
+        is_interactive = job_type == "Interactive"
 
         # Launch the app with the provided config
-        launch_kwargs = {"app_id": app_id, "system_id": system_id}
-        if name:
-            launch_kwargs["name"] = name
-        if config:
-            launch_kwargs.update(config)
-
-        launch_result = await self.client.launch_app(**launch_kwargs)
+        launch_result = await self.client.launch_app(
+            app_id=app_id,
+            system_id=system_id,
+            name=name,
+            config=config,
+        )
         analysis_id = launch_result["analysis_id"]
 
-        # Poll status until ready or timeout
+        # For batch jobs, return immediately without waiting for URL
+        if not is_interactive:
+            return {
+                "analysis_id": analysis_id,
+                "status": "submitted",
+                "job_type": job_type,
+            }
+
+        # For interactive apps, poll status until ready or timeout
         start_time = time.time()
         while time.time() - start_time < max_wait:
             status_result = await self.client.get_analysis_status(analysis_id)

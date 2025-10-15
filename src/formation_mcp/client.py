@@ -129,21 +129,21 @@ class FormationClient:
             response.raise_for_status()
             return response.json()
 
-    async def get_app_config(self, app_id: str, system_id: str = "de") -> dict[str, Any]:
-        """Get the configuration/parameters for an app.
+    async def get_app_parameters(self, app_id: str, system_id: str = "de") -> dict[str, Any]:
+        """Get the parameters for an app.
 
         Args:
             app_id: UUID of the app
             system_id: System identifier (default: 'de')
 
         Returns:
-            Dictionary with app configuration including required parameters
+            Dictionary with app parameter groups including required parameters
         """
         await self._ensure_token()
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(
-                f"{self.base_url}/apps/{system_id}/{app_id}/config",
+                f"{self.base_url}/apps/{system_id}/{app_id}/parameters",
                 headers=self.headers,
             )
             response.raise_for_status()
@@ -154,7 +154,7 @@ class FormationClient:
         app_id: str,
         system_id: str = "de",
         name: str | None = None,
-        **config,
+        config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Launch an interactive application.
 
@@ -162,7 +162,7 @@ class FormationClient:
             app_id: UUID of the app to launch
             system_id: System identifier (default: 'de')
             name: Optional custom name for the analysis
-            **config: Additional configuration parameters
+            config: Configuration parameters for the app
 
         Returns:
             Dictionary with analysis_id, name, status, and optionally url
@@ -173,7 +173,7 @@ class FormationClient:
         if name:
             body["name"] = name
         if config:
-            body.update(config)
+            body["config"] = config
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
@@ -360,6 +360,42 @@ class FormationClient:
                 headers=headers,
                 params=params,
                 content=content if content else b"",
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def delete_data(
+        self,
+        path: str,
+        recurse: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Delete a file or directory from iRODS.
+
+        Args:
+            path: iRODS path to delete
+            recurse: Allow deleting non-empty directories (default: False)
+            dry_run: Preview deletion without executing (default: False)
+
+        Returns:
+            Dictionary with deletion result including dry_run status
+        """
+        await self._ensure_token()
+
+        params: dict[str, Any] = {}
+        if recurse:
+            params["recurse"] = "true"
+        if dry_run:
+            params["dry_run"] = "true"
+
+        # Remove leading slash if present for the URL path
+        url_path = path.lstrip("/")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.delete(
+                f"{self.base_url}/data/{url_path}",
+                headers=self.headers,
+                params=params,
             )
             response.raise_for_status()
             return response.json()
