@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+formation-mcp
+formation-mcp.yml
+formation-mcp.yaml
