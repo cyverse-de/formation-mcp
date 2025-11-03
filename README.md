@@ -89,13 +89,11 @@ formation-mcp \
   --poll-interval 5
 ```
 
-## Claude Code Integration
+## Claude Integration
 
-Add to your Claude Code MCP configuration:
+### Claude Code (Terminal)
 
-### macOS/Linux
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Claude Code works on macOS, Linux, and Windows. Edit `~/.claude.json`:
 
 ```json
 {
@@ -112,9 +110,37 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-### Windows
+For Windows, use the full path to the binary: `"command": "C:\\path\\to\\formation-mcp.exe"`
 
-Edit `%APPDATA%\Claude\claude_desktop_config.json` with similar configuration.
+### Claude Desktop (macOS/Windows)
+
+#### Configure via UI (Recommended)
+
+1. Open Claude Desktop
+2. Go to Settings → Developer → Edit Config
+3. Add the formation-mcp server configuration
+4. Restart Claude Desktop
+
+#### Configure via File
+
+**macOS**: Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+**Windows**: Edit `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "/path/to/formation-mcp",
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
 
 ## Available Tools
 
