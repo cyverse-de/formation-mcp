@@ -2,8 +2,6 @@
 
 A Model Context Protocol (MCP) server for interacting with the CyVerse Discovery Environment Formation API. This server provides Claude Code and other MCP-compatible clients with tools to manage applications, analyses, and data in the Discovery Environment.
 
-**Now available in Go!** This is the Go implementation, providing a single static binary with no external dependencies. The original Python implementation is available in the `python/` directory.
-
 ## Features
 
 - **Application Management**: List, launch, and monitor interactive (VICE) and batch applications
@@ -123,10 +121,13 @@ Edit `%APPDATA%\Claude\claude_desktop_config.json` with similar configuration.
 ### Application Management
 
 #### `list_apps`
-List available interactive VICE applications.
+List available applications with optional filtering.
 
 **Parameters:**
 - `name` (optional): Filter by app name
+- `integrator` (optional): Filter by integrator username
+- `description` (optional): Filter by app description
+- `job_type` (optional): Filter by job type (Interactive, DE, OSG, Tapis)
 - `limit` (optional): Maximum number of apps to return (default: 10)
 - `offset` (optional): Offset for pagination (default: 0)
 
@@ -156,7 +157,11 @@ Check the status of a running analysis.
 - `analysis_id` (required): The analysis ID
 
 #### `list_running_analyses`
-List all currently running analyses.
+List analyses filtered by status.
+
+**Parameters:**
+- `status` (optional): Status filter (default: "Running")
+  - Possible values: Running, Completed, Failed, Submitted, Canceled
 
 #### `stop_analysis`
 Stop a running analysis.

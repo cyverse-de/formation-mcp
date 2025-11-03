@@ -8,10 +8,10 @@
 - ✅ offset
 - ✅ name
 - ✅ integrator
-- ❌ **description** - Filter by app description
-- ❌ **integration_date** - Filter by integration date
-- ❌ **edited_date** - Filter by edit date
-- ❌ **job_type** - Filter by job type (Interactive, DE, OSG, Tapis)
+- ✅ description
+- ❌ **integration_date** - Filter by integration date (specialized, rarely used)
+- ❌ **edited_date** - Filter by edit date (specialized, rarely used)
+- ✅ job_type
 
 ### 2. get_app_parameters Tool
 **Formation API `/apps/{system_id}/{app_id}/parameters` supports:**
@@ -87,24 +87,24 @@
 - ✅ url
 - ✅ All parameters covered
 
-## Priority Issues
+## Implementation Status
 
-### COMPLETED ✅
-1. ✅ **Removed overall_job_type** from launch_app_and_wait - didn't exist in API
-2. ✅ **Added status parameter** to list_running_analyses - was hardcoded to "Running"
-3. ✅ **Fixed replace_metadata** parameter name in set_metadata - now uses correct `replace_metadata` query param
-4. ✅ **Added description filter** to list_apps
-5. ✅ **Added job_type filter** to list_apps
+### Completed ✅
+1. ✅ Removed overall_job_type from launch_app_and_wait (didn't exist in API)
+2. ✅ Added status parameter to list_running_analyses
+3. ✅ Fixed replace_metadata parameter in set_metadata
+4. ✅ Added description filter to list_apps
+5. ✅ Added job_type filter to list_apps
 
-### REMAINING - MEDIUM PRIORITY
-6. **Add avu_delimiter** to browse_data, set_metadata, upload_file, create_directory
-   - This controls how metadata values/units are parsed (default: ",")
-   - Lower priority as defaults work for most cases
+### Not Implemented (Low Priority)
+These parameters have working defaults and are rarely needed:
 
-### REMAINING - LOW PRIORITY
-7. **Add integration_date filter** to list_apps
-8. **Add edited_date filter** to list_apps
-   - These are specialized filters not commonly used
+- **avu_delimiter** (browse_data, set_metadata, upload_file, create_directory)
+  - Controls metadata value/unit parsing (default: ",")
+  - Defaults work for most use cases
+
+- **integration_date** and **edited_date** filters (list_apps)
+  - Specialized filters rarely used in practice
 
 ## Notes
 - The Formation API uses X-Datastore-* headers for metadata

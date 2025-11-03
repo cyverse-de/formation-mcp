@@ -19,11 +19,11 @@ import (
 type FormationMCPServer struct {
 	server    *server.MCPServer
 	workflows *workflows.FormationWorkflows
-	client    *client.FormationClient
+	client    client.FormationAPIClient
 }
 
 // NewFormationMCPServer creates a new Formation MCP server.
-func NewFormationMCPServer(workflows *workflows.FormationWorkflows, c *client.FormationClient) *FormationMCPServer {
+func NewFormationMCPServer(workflows *workflows.FormationWorkflows, c client.FormationAPIClient) *FormationMCPServer {
 	mcpServer := server.NewMCPServer(
 		"formation-mcp",
 		"1.0.0",
@@ -71,7 +71,7 @@ func (s *FormationMCPServer) registerTools() {
 func (s *FormationMCPServer) listAppsTool() mcp.Tool {
 	return mcp.Tool{
 		Name:        "list_apps",
-		Description: "List available interactive VICE applications",
+		Description: "List available applications with optional filtering",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{

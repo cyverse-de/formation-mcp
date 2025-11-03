@@ -1,3 +1,5 @@
+// Formation MCP server provides MCP tools for interacting with the CyVerse Discovery Environment.
+// It enables Claude Code and other MCP-compatible clients to manage applications, analyses, and data.
 package main
 
 import (
@@ -71,7 +73,8 @@ func main() {
 
 	// Create workflows
 	pollDuration := time.Duration(cfg.PollInterval) * time.Second
-	formationWorkflows := workflows.NewFormationWorkflows(formationClient, pollDuration)
+	browserOpener := &workflows.SystemBrowserOpener{}
+	formationWorkflows := workflows.NewFormationWorkflows(formationClient, browserOpener, pollDuration)
 
 	// Create MCP server
 	formationMCPServer := formationServer.NewFormationMCPServer(formationWorkflows, formationClient)

@@ -17,7 +17,53 @@ import (
 const (
 	// metadataHeaderPrefix is the prefix for metadata headers
 	metadataHeaderPrefix = "X-Datastore-"
+
+	// tokenExpiryMargin is the safety margin before token expiry to trigger refresh
+	tokenExpiryMargin = 60 * time.Second
+
+	// defaultHTTPTimeout is the default timeout for HTTP requests
+	defaultHTTPTimeout = 30 * time.Second
 )
+
+// FormationAPIClient defines the interface for interacting with the Formation API.
+// This interface allows for mocking in tests and alternative implementations.
+type FormationAPIClient interface {
+	// Login authenticates with the Formation API and obtains an access token.
+	Login(ctx context.Context) error
+
+	// ListApps lists available applications with optional filtering.
+	ListApps(ctx context.Context, name, integrator, description, jobType string, limit, offset int) ([]App, error)
+
+	// GetAppParameters retrieves the parameter definitions for an app.
+	GetAppParameters(ctx context.Context, systemID, appID string) (*AppParameters, error)
+
+	// LaunchApp launches an application with the given configuration.
+	LaunchApp(ctx context.Context, systemID, appID string, submission LaunchSubmission) (*LaunchResponse, error)
+
+	// GetAnalysisStatus retrieves the status of an analysis.
+	GetAnalysisStatus(ctx context.Context, analysisID string) (*AnalysisStatus, error)
+
+	// ListAnalyses lists analyses filtered by status.
+	ListAnalyses(ctx context.Context, status string) ([]Analysis, error)
+
+	// ControlAnalysis controls an analysis (e.g., stop, pause).
+	ControlAnalysis(ctx context.Context, analysisID, operation string, saveOutputs bool) error
+
+	// BrowseData browses a directory or reads a file from iRODS.
+	BrowseData(ctx context.Context, path string, offset, limit int, includeMetadata bool) (interface{}, error)
+
+	// CreateDirectory creates a directory in iRODS.
+	CreateDirectory(ctx context.Context, path string, metadata map[string]interface{}) (*CreateDirectoryResponse, error)
+
+	// UploadFile uploads a file to iRODS.
+	UploadFile(ctx context.Context, path, content string, metadata map[string]interface{}) error
+
+	// SetMetadata sets metadata on a path in iRODS.
+	SetMetadata(ctx context.Context, path string, metadata map[string]interface{}, replace bool) error
+
+	// DeleteData deletes a file or directory from iRODS.
+	DeleteData(ctx context.Context, path string, recurse, dryRun bool) error
+}
 
 // FormationClient is the HTTP client for the Formation API.
 type FormationClient struct {
@@ -34,13 +80,16 @@ func NewFormationClient(baseURL, token, username, password string) *FormationCli
 	return &FormationClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: defaultHTTPTimeout,
 		},
 		token:    token,
 		username: username,
 		password: password,
 	}
 }
+
+// Compile-time check to ensure FormationClient implements FormationAPIClient.
+var _ FormationAPIClient = (*FormationClient)(nil)
 
 // ensureToken ensures that the client has a valid token.
 // If the token is expired or missing and credentials are provided, it will login.
@@ -95,9 +144,9 @@ func (c *FormationClient) Login(ctx context.Context) error {
 	}
 
 	c.token = loginResp.AccessToken
-	// Calculate expiry time from expires_in (seconds) with 60-second safety margin
+	// Calculate expiry time from expires_in (seconds) with safety margin
 	expiresAt := time.Now().Add(time.Duration(loginResp.ExpiresIn) * time.Second)
-	c.tokenExpiry = expiresAt.Add(-60 * time.Second)
+	c.tokenExpiry = expiresAt.Add(-tokenExpiryMargin)
 
 	slog.Info("login successful", "expires_in", loginResp.ExpiresIn, "expires_at", expiresAt, "effective_expiry", c.tokenExpiry)
 	return nil
@@ -144,6 +193,34 @@ func (c *FormationClient) doRequest(ctx context.Context, method, path string, bo
 	return resp, nil
 }
 
+// buildDataPath constructs the full API path for data store operations.
+// It ensures the path starts with /data/ and normalizes leading slashes.
+func (c *FormationClient) buildDataPath(path string) string {
+	return "/data/" + strings.TrimPrefix(path, "/")
+}
+
+// addMetadataHeaders adds metadata as X-Datastore-* headers to the headers map.
+func (c *FormationClient) addMetadataHeaders(headers map[string]string, metadata map[string]interface{}) {
+	for k, v := range metadata {
+		headers[metadataHeaderPrefix+k] = fmt.Sprint(v)
+	}
+}
+
+// doRequestAndDecode performs an HTTP request and decodes the JSON response.
+// This helper reduces boilerplate for API calls that return JSON responses.
+func (c *FormationClient) doRequestAndDecode(ctx context.Context, method, path string, body io.Reader, headers map[string]string, result interface{}) error {
+	resp, err := c.doRequest(ctx, method, path, body, headers)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+	return nil
+}
+
 // ListApps lists available VICE applications.
 func (c *FormationClient) ListApps(ctx context.Context, name, integrator, description, jobType string, limit, offset int) ([]App, error) {
 	query := url.Values{}
@@ -163,15 +240,9 @@ func (c *FormationClient) ListApps(ctx context.Context, name, integrator, descri
 	query.Set("offset", fmt.Sprintf("%d", offset))
 
 	path := "/apps?" + query.Encode()
-	resp, err := c.doRequest(ctx, "GET", path, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var appResp AppListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&appResp); err != nil {
-		return nil, fmt.Errorf("failed to decode apps response: %w", err)
+	if err := c.doRequestAndDecode(ctx, "GET", path, nil, nil, &appResp); err != nil {
+		return nil, err
 	}
 
 	return appResp.Apps, nil
@@ -180,15 +251,9 @@ func (c *FormationClient) ListApps(ctx context.Context, name, integrator, descri
 // GetAppParameters retrieves the parameters for an app.
 func (c *FormationClient) GetAppParameters(ctx context.Context, systemID, appID string) (*AppParameters, error) {
 	path := fmt.Sprintf("/apps/%s/%s/parameters", systemID, appID)
-	resp, err := c.doRequest(ctx, "GET", path, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var params AppParameters
-	if err := json.NewDecoder(resp.Body).Decode(&params); err != nil {
-		return nil, fmt.Errorf("failed to decode parameters response: %w", err)
+	if err := c.doRequestAndDecode(ctx, "GET", path, nil, nil, &params); err != nil {
+		return nil, err
 	}
 
 	return &params, nil
@@ -209,15 +274,9 @@ func (c *FormationClient) LaunchApp(ctx context.Context, systemID, appID string,
 		"Content-Type": "application/json",
 	}
 
-	resp, err := c.doRequest(ctx, "POST", path, bytes.NewReader(body), headers)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var launchResp LaunchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&launchResp); err != nil {
-		return nil, fmt.Errorf("failed to decode launch response: %w", err)
+	if err := c.doRequestAndDecode(ctx, "POST", path, bytes.NewReader(body), headers, &launchResp); err != nil {
+		return nil, err
 	}
 
 	return &launchResp, nil
@@ -226,15 +285,9 @@ func (c *FormationClient) LaunchApp(ctx context.Context, systemID, appID string,
 // GetAnalysisStatus retrieves the status of an analysis.
 func (c *FormationClient) GetAnalysisStatus(ctx context.Context, analysisID string) (*AnalysisStatus, error) {
 	path := fmt.Sprintf("/apps/analyses/%s/status", analysisID)
-	resp, err := c.doRequest(ctx, "GET", path, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var status AnalysisStatus
-	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-		return nil, fmt.Errorf("failed to decode status response: %w", err)
+	if err := c.doRequestAndDecode(ctx, "GET", path, nil, nil, &status); err != nil {
+		return nil, err
 	}
 
 	return &status, nil
@@ -252,15 +305,9 @@ func (c *FormationClient) ListAnalyses(ctx context.Context, status string) ([]An
 		path += "?" + query.Encode()
 	}
 
-	resp, err := c.doRequest(ctx, "GET", path, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var analysisResp AnalysisListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&analysisResp); err != nil {
-		return nil, fmt.Errorf("failed to decode analyses response: %w", err)
+	if err := c.doRequestAndDecode(ctx, "GET", path, nil, nil, &analysisResp); err != nil {
+		return nil, err
 	}
 
 	return analysisResp.Analyses, nil
@@ -296,7 +343,7 @@ func (c *FormationClient) BrowseData(ctx context.Context, path string, offset, l
 		query.Set("include_metadata", "true")
 	}
 
-	fullPath := "/data/" + strings.TrimPrefix(path, "/")
+	fullPath := c.buildDataPath(path)
 	if len(query) > 0 {
 		fullPath += "?" + query.Encode()
 	}
@@ -343,7 +390,7 @@ func (c *FormationClient) BrowseData(ctx context.Context, path string, offset, l
 // CreateDirectory creates a directory in iRODS.
 // Uses resource_type=directory query parameter with no body, per Formation API.
 func (c *FormationClient) CreateDirectory(ctx context.Context, path string, metadata map[string]interface{}) (*CreateDirectoryResponse, error) {
-	fullPath := "/data/" + strings.TrimPrefix(path, "/")
+	fullPath := c.buildDataPath(path)
 
 	// Add resource_type=directory query parameter
 	query := url.Values{}
@@ -353,9 +400,7 @@ func (c *FormationClient) CreateDirectory(ctx context.Context, path string, meta
 	headers := map[string]string{}
 
 	// Add metadata headers
-	for k, v := range metadata {
-		headers[metadataHeaderPrefix+k] = fmt.Sprint(v)
-	}
+	c.addMetadataHeaders(headers, metadata)
 
 	// No body for directory creation
 	resp, err := c.doRequest(ctx, "PUT", fullPath, nil, headers)
@@ -374,15 +419,13 @@ func (c *FormationClient) CreateDirectory(ctx context.Context, path string, meta
 
 // UploadFile uploads a file to iRODS.
 func (c *FormationClient) UploadFile(ctx context.Context, path, content string, metadata map[string]interface{}) error {
-	fullPath := "/data/" + strings.TrimPrefix(path, "/")
+	fullPath := c.buildDataPath(path)
 	headers := map[string]string{
 		"Content-Type": "application/octet-stream",
 	}
 
 	// Add metadata headers
-	for k, v := range metadata {
-		headers[metadataHeaderPrefix+k] = fmt.Sprint(v)
-	}
+	c.addMetadataHeaders(headers, metadata)
 
 	resp, err := c.doRequest(ctx, "PUT", fullPath, strings.NewReader(content), headers)
 	if err != nil {
@@ -395,7 +438,7 @@ func (c *FormationClient) UploadFile(ctx context.Context, path, content string, 
 
 // SetMetadata sets metadata on a path in iRODS.
 func (c *FormationClient) SetMetadata(ctx context.Context, path string, metadata map[string]interface{}, replace bool) error {
-	fullPath := "/data/" + strings.TrimPrefix(path, "/")
+	fullPath := c.buildDataPath(path)
 	query := url.Values{}
 	if replace {
 		query.Set("replace_metadata", "true")
@@ -409,9 +452,7 @@ func (c *FormationClient) SetMetadata(ctx context.Context, path string, metadata
 	}
 
 	// Add metadata headers
-	for k, v := range metadata {
-		headers[metadataHeaderPrefix+k] = fmt.Sprint(v)
-	}
+	c.addMetadataHeaders(headers, metadata)
 
 	resp, err := c.doRequest(ctx, "PUT", fullPath, nil, headers)
 	if err != nil {
@@ -424,7 +465,7 @@ func (c *FormationClient) SetMetadata(ctx context.Context, path string, metadata
 
 // DeleteData deletes a file or directory from iRODS.
 func (c *FormationClient) DeleteData(ctx context.Context, path string, recurse, dryRun bool) error {
-	fullPath := "/data/" + strings.TrimPrefix(path, "/")
+	fullPath := c.buildDataPath(path)
 	query := url.Values{}
 	if recurse {
 		query.Set("recurse", "true")

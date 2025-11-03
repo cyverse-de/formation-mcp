@@ -12,17 +12,55 @@ import (
 	"github.com/cyverse-de/formation-mcp/internal/client"
 )
 
+// BrowserOpener defines the interface for opening URLs in a browser.
+type BrowserOpener interface {
+	Open(url string) error
+}
+
+// SystemBrowserOpener implements BrowserOpener using the system's default browser.
+type SystemBrowserOpener struct{}
+
+// Open opens a URL in the system's default browser.
+func (s *SystemBrowserOpener) Open(url string) error {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+
+	slog.Info("opening url in browser", "url", url)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// Wait in background to clean up process resources and prevent zombie processes
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	return nil
+}
+
 // FormationWorkflows provides high-level workflow operations.
 type FormationWorkflows struct {
-	client       *client.FormationClient
-	pollInterval time.Duration
+	client        client.FormationAPIClient
+	browserOpener BrowserOpener
+	pollInterval  time.Duration
 }
 
 // NewFormationWorkflows creates a new workflows instance.
-func NewFormationWorkflows(c *client.FormationClient, pollInterval time.Duration) *FormationWorkflows {
+func NewFormationWorkflows(c client.FormationAPIClient, browserOpener BrowserOpener, pollInterval time.Duration) *FormationWorkflows {
 	return &FormationWorkflows{
-		client:       c,
-		pollInterval: pollInterval,
+		client:        c,
+		browserOpener: browserOpener,
+		pollInterval:  pollInterval,
 	}
 }
 
@@ -142,23 +180,9 @@ func (w *FormationWorkflows) StopAnalysis(ctx context.Context, analysisID string
 	return w.client.ControlAnalysis(ctx, analysisID, operation, saveOutputs)
 }
 
-// OpenInBrowser opens a URL in the default browser.
+// OpenInBrowser opens a URL in the default browser using the configured browser opener.
 func (w *FormationWorkflows) OpenInBrowser(url string) error {
-	var cmd *exec.Cmd
-
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
-	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
-
-	slog.Info("opening url in browser", "url", url)
-	return cmd.Start()
+	return w.browserOpener.Open(url)
 }
 
 // checkMissingParams checks if any required parameters are missing from the config.
