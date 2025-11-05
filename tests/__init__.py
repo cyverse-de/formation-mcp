@@ -1,1 +1,0 @@
-"""Tests for formation-mcp."""

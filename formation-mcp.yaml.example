@@ -1,0 +1,27 @@
+# Formation MCP Configuration Example
+# Copy this file to ~/.formation-mcp.yaml or ~/.config/formation-mcp/config.yaml
+# and update with your settings.
+
+# Formation service base URL (required)
+base_url: https://de.cyverse.org/formation
+
+# Authentication - choose ONE of the following options:
+
+# Option 1: Username and password (recommended)
+# The server will automatically obtain and refresh JWT tokens
+username: your-username
+password: your-password
+
+# Option 2: Pre-obtained JWT token
+# token: your-jwt-token
+
+# Logging configuration
+log_level: info  # Options: debug, info, warn, error
+log_json: false  # Set to true for JSON-formatted logs
+
+# Analysis status polling interval (in seconds)
+poll_interval: 5
+
+# Optional: Metrics endpoint address (disabled by default)
+# Uncomment to enable Prometheus metrics
+# metrics_addr: :9090
