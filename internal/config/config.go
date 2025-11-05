@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -115,6 +116,20 @@ func FromFile(path string) (*Config, error) {
 	return cfg, nil
 }
 
+// getDefaultConfigPaths returns platform-specific default config file paths.
+func getDefaultConfigPaths() []string {
+	if runtime.GOOS == "windows" {
+		return []string{
+			"~/.formation-mcp.yaml",
+			"~/formation-mcp.yaml",
+		}
+	}
+	return []string{
+		"~/.formation-mcp.yaml",
+		"~/.config/formation-mcp/config.yaml",
+	}
+}
+
 // Load loads configuration with proper precedence:
 // CLI flags (via cfg parameter) > environment variables > config file > defaults
 func Load(cfg *Config) (*Config, error) {
@@ -131,11 +146,8 @@ func Load(cfg *Config) (*Config, error) {
 			result = mergeConfigs(result, fileCfg)
 		}
 	} else {
-		// Try default config locations
-		for _, defaultPath := range []string{
-			"~/.formation-mcp.yaml",
-			"~/.config/formation-mcp/config.yaml",
-		} {
+		// Try default config locations (platform-specific)
+		for _, defaultPath := range getDefaultConfigPaths() {
 			fileCfg, err := FromFile(defaultPath)
 			if err != nil {
 				return nil, err
