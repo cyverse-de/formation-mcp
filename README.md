@@ -1,71 +1,91 @@
 # Formation MCP
 
-A Model Context Protocol (MCP) server for interacting with the CyVerse Discovery Environment Formation API. This server provides Claude Code and other MCP-compatible clients with tools to manage applications, analyses, and data in the Discovery Environment.
+Use Claude Code in your terminal to manage CyVerse Discovery Environment applications and data through natural conversation.
 
-## Features
+## What is this?
 
-- **Application Management**: List, launch, and monitor interactive (VICE) and batch applications
-- **Analysis Control**: Check status, list running analyses, and stop analyses
-- **Data Operations**: Browse directories, upload/download files, manage metadata in iRODS
-- **Browser Integration**: Automatically open interactive apps in your default browser
-- **Single Binary**: Distributed as a static binary with no external dependencies
-- **Human-Readable Logging**: Structured logs in both human-friendly and JSON formats
+Formation MCP connects Claude Code (the AI assistant in your terminal) to the CyVerse Discovery Environment. Instead of using a web browser, you can ask Claude to:
 
-## Installation
+- Launch and monitor scientific applications
+- Browse and manage your data files
+- Check the status of running analyses
+- Upload and download files
 
-### Pre-built Binaries
+**Example:** "Launch the Cloud Shell app with my analysis folder as input" or "What files are in my home directory?"
 
-Download the latest release for your platform from the [releases page](https://github.com/cyverse-de/formation-mcp/releases).
+## Quick Start
 
-### From Source
+### 1. Get Formation MCP
 
-Requirements:
-- Go 1.25.3 or later
-- `just` command runner (optional, for development tasks)
+Download the latest version for your platform:
+- **macOS/Linux/Windows**: [Download from releases](https://github.com/cyverse-de/formation-mcp/releases)
 
+Or build from source if you have Go installed:
 ```bash
-# Clone the repository
 git clone https://github.com/cyverse-de/formation-mcp.git
 cd formation-mcp
-
-# Build
-just build
-# or
 go build -o formation-mcp ./cmd/formation-mcp
-
-# Install to GOPATH/bin
-just install
-# or
-go install ./cmd/formation-mcp
 ```
 
-## Configuration
+### 2. Set Up Your Credentials
 
-Formation MCP can be configured using environment variables, a YAML configuration file, or command-line flags. Configuration precedence (highest to lowest):
+Create a configuration file at `~/.claude.json`:
 
-1. Command-line flags
-2. Environment variables
-3. Configuration file
-4. Default values
-
-### Environment Variables
-
-```bash
-# Required
-export FORMATION_BASE_URL="https://de.cyverse.org/formation"
-
-# Authentication (choose one)
-export FORMATION_TOKEN="your-jwt-token"
-# OR
-export FORMATION_USERNAME="your-username"
-export FORMATION_PASSWORD="your-password"
-
-# Optional
-export LOG_LEVEL="info"              # debug, info, warn, error
-export LOG_JSON="false"              # true for JSON output
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "/path/to/formation-mcp",
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-cyverse-username",
+        "FORMATION_PASSWORD": "your-cyverse-password"
+      }
+    }
+  }
+}
 ```
 
-### Configuration File
+**Important:** Replace `/path/to/formation-mcp` with the actual path where you saved the binary. On Windows, use `C:\\path\\to\\formation-mcp.exe`.
+
+### 3. Start Using Claude Code
+
+Open your terminal and start Claude Code. The Formation MCP server will automatically connect, giving Claude access to your CyVerse environment.
+
+Try asking Claude:
+- "What applications are available?"
+- "List the contents of my home folder"
+- "Launch the RStudio app"
+
+## What Can You Do?
+
+### Work with Applications
+
+- **Find apps**: Search for available applications by name, integrator, or type
+- **Get details**: See what parameters an app requires
+- **Launch apps**: Start interactive or batch applications
+- **Monitor progress**: Check the status of running analyses
+- **Open in browser**: Automatically open interactive apps when ready
+- **Stop analyses**: Cancel running jobs
+
+### Manage Your Data
+
+- **Browse directories**: List files and folders in your data store
+- **Read files**: View file contents
+- **Upload files**: Add new files to your data store
+- **Create folders**: Organize your data with directories
+- **Manage metadata**: Add or update metadata on files and folders
+- **Delete items**: Remove files or directories (with dry-run preview)
+
+## Configuration Options
+
+Formation MCP can be configured three ways (in order of priority):
+
+### Option 1: Claude Code Config File (Recommended)
+
+Edit `~/.claude.json` and add the Formation MCP server as shown in Quick Start above.
+
+### Option 2: Standalone Config File
 
 Create `~/.formation-mcp.yaml`:
 
@@ -74,26 +94,79 @@ base_url: https://de.cyverse.org/formation
 username: your-username
 password: your-password
 log_level: info
-log_json: false
-poll_interval: 5  # seconds
+poll_interval: 5  # seconds between status checks
 ```
 
-### Command-Line Flags
+### Option 3: Environment Variables
 
 ```bash
-formation-mcp \
-  --base-url https://de.cyverse.org/formation \
-  --username your-username \
-  --password your-password \
-  --log-level info \
-  --poll-interval 5
+export FORMATION_BASE_URL="https://de.cyverse.org/formation"
+export FORMATION_USERNAME="your-username"
+export FORMATION_PASSWORD="your-password"
+export LOG_LEVEL="info"  # debug, info, warn, error
 ```
 
-## Claude Integration
+## Troubleshooting
 
-### Claude Code (Terminal)
+### "Authentication failed" or "Login failed"
 
-Claude Code works on macOS, Linux, and Windows. Edit `~/.claude.json`:
+- Check that your CyVerse username and password are correct
+- Verify the FORMATION_BASE_URL matches your environment:
+  - Production: `https://de.cyverse.org/formation`
+  - QA: `https://qa.cyverse.org/formation`
+
+### "Connection refused" or "Cannot connect"
+
+- Make sure you have internet access
+- Verify the Formation URL is accessible from your network
+- Check that the URL starts with `https://`
+
+### Claude doesn't see Formation tools
+
+- Confirm the `command` path in `~/.claude.json` points to the correct binary location
+- Try running the binary directly to ensure it's executable: `./formation-mcp --help`
+- On macOS/Linux, you may need to make it executable: `chmod +x formation-mcp`
+- Restart Claude Code after changing the configuration
+
+### Apps or analyses aren't working
+
+- Check you have permission to access the app or data
+- For detailed error information, set `LOG_LEVEL="debug"` in your configuration
+- Look for error messages in Claude's output
+
+## Example Workflows
+
+### Launch an Analysis
+
+```
+You: Find the Cloud Shell application
+Claude: [Shows available Cloud Shell apps]
+
+You: Launch the main Cloud Shell with my analysis folder as input
+Claude: [Launches app and provides analysis ID]
+
+You: Open it in my browser when it's ready
+Claude: [Monitors status and opens browser when ready]
+```
+
+### Manage Data
+
+```
+You: What's in my home folder?
+Claude: [Lists directories and files]
+
+You: Show me the contents of the analyses folder
+Claude: [Displays directory contents]
+
+You: Create a new folder called "project-2025"
+Claude: [Creates the directory]
+```
+
+## Advanced Configuration
+
+### Using a Pre-obtained Token
+
+If you have a JWT token instead of username/password:
 
 ```json
 {
@@ -102,272 +175,107 @@ Claude Code works on macOS, Linux, and Windows. Edit `~/.claude.json`:
       "command": "/path/to/formation-mcp",
       "env": {
         "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
-        "FORMATION_USERNAME": "your-username",
-        "FORMATION_PASSWORD": "your-password"
+        "FORMATION_TOKEN": "your-jwt-token-here"
       }
     }
   }
 }
 ```
 
-For Windows, use the full path to the binary: `"command": "C:\\path\\to\\formation-mcp.exe"`
+### Custom Poll Interval
 
-### Claude Desktop (macOS/Windows)
+Control how often Formation MCP checks analysis status (default: 5 seconds):
 
-#### Configure via UI (Recommended)
-
-1. Open Claude Desktop
-2. Go to Settings → Developer → Edit Config
-3. Add the formation-mcp server configuration
-4. Restart Claude Desktop
-
-#### Configure via File
-
-**macOS**: Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-**Windows**: Edit `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "formation": {
-      "command": "/path/to/formation-mcp",
-      "env": {
-        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
-        "FORMATION_USERNAME": "your-username",
-        "FORMATION_PASSWORD": "your-password"
-      }
-    }
-  }
-}
+```yaml
+poll_interval: 10  # Check every 10 seconds
 ```
 
-## Available Tools
+### Debug Logging
 
-### Application Management
-
-#### `list_apps`
-List available applications with optional filtering.
-
-**Parameters:**
-- `name` (optional): Filter by app name
-- `integrator` (optional): Filter by integrator username
-- `description` (optional): Filter by app description
-- `job_type` (optional): Filter by job type (Interactive, DE, OSG, Tapis)
-- `limit` (optional): Maximum number of apps to return (default: 10)
-- `offset` (optional): Offset for pagination (default: 0)
-
-#### `get_app_parameters`
-Get configuration and required parameters for an application.
-
-**Parameters:**
-- `app_id` (required): The application ID
-- `system_id` (optional): The system ID (default: "de")
-
-#### `launch_app_and_wait`
-Launch an application and wait for it to be ready (interactive apps only).
-
-**Parameters:**
-- `app_id` (required): The application ID
-- `system_id` (optional): The system ID (default: "de")
-- `name` (optional): Name for the analysis
-- `config` (optional): Configuration parameters for the app
-- `max_wait` (optional): Maximum time to wait in seconds (default: 300)
-
-### Analysis Management
-
-#### `get_analysis_status`
-Check the status of a running analysis.
-
-**Parameters:**
-- `analysis_id` (required): The analysis ID
-
-#### `list_running_analyses`
-List analyses filtered by status.
-
-**Parameters:**
-- `status` (optional): Status filter (default: "Running")
-  - Possible values: Running, Completed, Failed, Submitted, Canceled
-
-#### `stop_analysis`
-Stop a running analysis.
-
-**Parameters:**
-- `analysis_id` (required): The analysis ID to stop
-- `save_outputs` (optional): Whether to save outputs before stopping (default: true)
-
-### Data Operations
-
-#### `browse_data`
-Browse a directory or read a file from iRODS.
-
-**Parameters:**
-- `path` (required): The path to browse or read
-- `offset` (optional): Offset for pagination (default: 0)
-- `limit` (optional): Limit for pagination (default: 100)
-- `include_metadata` (optional): Include metadata in response (default: false)
-
-#### `create_directory`
-Create a new directory in iRODS.
-
-**Parameters:**
-- `path` (required): The path for the new directory
-- `metadata` (optional): Optional metadata to attach
-
-#### `upload_file`
-Upload a file to iRODS.
-
-**Parameters:**
-- `path` (required): The destination path for the file
-- `content` (required): The file content
-- `metadata` (optional): Optional metadata to attach
-
-#### `set_metadata`
-Add or replace metadata on an existing path.
-
-**Parameters:**
-- `path` (required): The path to set metadata on
-- `metadata` (required): Metadata to set
-- `replace` (optional): Whether to replace existing metadata (default: false)
-
-#### `delete_data`
-Delete a file or directory from iRODS.
-
-**Parameters:**
-- `path` (required): The path to delete
-- `recurse` (optional): Whether to recursively delete directories (default: false)
-- `dry_run` (optional): Preview what would be deleted (default: false)
-
-### Utility
-
-#### `open_in_browser`
-Open a URL in the default browser.
-
-**Parameters:**
-- `url` (required): The URL to open
-
-## Development
-
-### Prerequisites
-
-- Go 1.25.3+
-- `just` command runner
-- `golangci-lint` (for linting)
-
-### Common Tasks
+Enable detailed logging to troubleshoot issues:
 
 ```bash
-# Build the binary
-just build
+export LOG_LEVEL="debug"
+```
+
+Or in your config file:
+```yaml
+log_level: debug
+```
+
+## Platform Support
+
+Formation MCP runs on:
+- macOS (Intel and Apple Silicon)
+- Linux (x86_64, arm64)
+- Windows (x86_64)
+
+## For Developers
+
+### Building from Source
+
+Requirements:
+- Go 1.25.3 or later
+- Optional: `just` command runner
+
+```bash
+# Build
+go build -o formation-mcp ./cmd/formation-mcp
 
 # Run tests
+go test ./...
+
+# With just
+just build
 just test
-
-# Run tests with coverage
-just test-coverage
-
-# Run linter
-just lint
-
-# Format code
-just fmt
-
-# Run all checks (format, lint, test)
-just check
-
-# Clean build artifacts
-just clean
-
-# Build for all platforms
-just build-all 1.0.0
-
-# Create distribution archives
-just dist 1.0.0
 ```
-
-See `just --list` for all available commands.
 
 ### Project Structure
 
 ```
 formation-mcp/
-├── cmd/
-│   └── formation-mcp/      # Main entry point
-│       └── main.go
+├── cmd/formation-mcp/      # Main application entry point
 ├── internal/
-│   ├── client/             # Formation API client
-│   │   ├── client.go
-│   │   └── types.go
+│   ├── client/             # Formation API HTTP client
 │   ├── config/             # Configuration management
-│   │   ├── config.go
-│   │   └── config_test.go
 │   ├── logging/            # Structured logging
-│   │   ├── logging.go
-│   │   └── logging_test.go
 │   ├── server/             # MCP server implementation
-│   │   └── server.go
-│   └── workflows/          # High-level workflows
-│       └── workflows.go
-├── Justfile                # Build recipes
-├── go.mod
-├── go.sum
-└── README.md
+│   └── workflows/          # High-level workflow operations
 ```
 
-## Logging
+### Development Tasks
 
-Formation MCP uses structured logging with two output formats:
+If you have `just` installed:
 
-### Human-Readable (Default)
-
-```
-2025-11-03T10:15:30.123 INFO  api_call method=GET endpoint=/apps duration=123ms
-2025-11-03T10:15:31.456 DEBUG launching app app_id=abc123 system_id=de
-```
-
-### JSON Format
-
-Enable with `--log-json` flag or `LOG_JSON=true`:
-
-```json
-{"time":"2025-11-03T10:15:30.123Z","level":"INFO","msg":"api_call","method":"GET","endpoint":"/apps","duration":"123ms"}
+```bash
+just build          # Build binary
+just test           # Run tests
+just test-coverage  # Run tests with coverage
+just lint           # Run linter
+just fmt            # Format code
+just check          # Run all checks
 ```
 
-Log levels: `debug`, `info`, `warn`, `error`
+### API Coverage
 
-## Troubleshooting
-
-### Authentication Errors
-
-- Verify your FORMATION_BASE_URL is correct
-- Check that your username/password or token is valid
-- Token may have expired - try username/password authentication
-
-### Connection Issues
-
-- Ensure the Formation service is accessible from your network
-- Check firewall settings
-- Verify FORMATION_BASE_URL uses https://
-
-### Tool Failures
-
-- Check logs with `--log-level debug` for detailed error messages
-- Verify required parameters are provided
-- Ensure you have permissions for the requested operation
-
-## License
-
-See [LICENSE](LICENSE) file.
+See [API_COVERAGE_ANALYSIS.md](API_COVERAGE_ANALYSIS.md) for details on which Formation API features are implemented.
 
 ## Contributing
+
+Contributions welcome! Please:
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run `just check` to ensure tests and linting pass
+4. Run `go test ./...` to verify tests pass
 5. Submit a pull request
 
 ## Support
 
-- Report issues: [GitHub Issues](https://github.com/cyverse-de/formation-mcp/issues)
-- CyVerse documentation: https://cyverse.org/
+- **Issues**: [GitHub Issues](https://github.com/cyverse-de/formation-mcp/issues)
+- **CyVerse**: https://cyverse.org/
+- **Documentation**: https://learning.cyverse.org/
+
+## License
+
+See [LICENSE](LICENSE) file for details.
