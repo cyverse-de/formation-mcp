@@ -15,15 +15,23 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// FormationWorkflowsInterface defines the workflow operations needed by the MCP server.
+type FormationWorkflowsInterface interface {
+	LaunchAndWait(ctx context.Context, appID, systemID, name string, config client.LaunchConfig, maxWait time.Duration) (*workflows.LaunchResult, error)
+	StopAnalysis(ctx context.Context, analysisID string, saveOutputs bool) error
+	OpenInBrowser(url string) error
+	BrowseDataWithFormat(ctx context.Context, path string, offset, limit int, includeMetadata bool) (interface{}, bool, error)
+}
+
 // FormationMCPServer wraps the MCP server with Formation-specific functionality.
 type FormationMCPServer struct {
 	server    *server.MCPServer
-	workflows *workflows.FormationWorkflows
+	workflows FormationWorkflowsInterface
 	client    client.FormationAPIClient
 }
 
 // NewFormationMCPServer creates a new Formation MCP server.
-func NewFormationMCPServer(workflows *workflows.FormationWorkflows, c client.FormationAPIClient) *FormationMCPServer {
+func NewFormationMCPServer(workflows FormationWorkflowsInterface, c client.FormationAPIClient) *FormationMCPServer {
 	mcpServer := server.NewMCPServer(
 		"formation-mcp",
 		"1.0.0",
