@@ -30,6 +30,8 @@ func main() {
 		logJSON      = flag.Bool("log-json", false, "Output logs in JSON format")
 		showVersion  = flag.Bool("version", false, "Show version and exit")
 		pollInterval = flag.Int("poll-interval", 0, "Analysis status poll interval in seconds (default: 5)")
+		transport    = flag.String("transport", "stdio", "Transport mode: stdio or sse")
+		port         = flag.String("port", "8080", "Port to listen on when --transport=sse")
 	)
 
 	flag.Parse()
@@ -79,11 +81,26 @@ func main() {
 	// Create MCP server
 	formationMCPServer := formationServer.NewFormationMCPServer(formationWorkflows, formationClient)
 
-	// Start stdio server
-	logger.Info("starting MCP stdio server")
-	if err := server.ServeStdio(formationMCPServer.Server()); err != nil {
-		logger.Error("server error", "error", err)
-		os.Exit(1)
+	switch *transport {
+	case "sse":
+		addr := fmt.Sprintf(":%s", *port)
+		baseURLForSSE := fmt.Sprintf("http://0.0.0.0:%s", *port)
+		logger.Info("starting MCP SSE server", "addr", addr)
+		sseServer := server.NewSSEServer(
+			formationMCPServer.Server(),
+			server.WithBaseURL(baseURLForSSE),
+		)
+		if err := sseServer.Start(addr); err != nil {
+			logger.Error("SSE server error", "error", err)
+			os.Exit(1)
+		}
+	default:
+		// stdio (default)
+		logger.Info("starting MCP stdio server")
+		if err := server.ServeStdio(formationMCPServer.Server()); err != nil {
+			logger.Error("server error", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	logger.Info("formation-mcp shutting down")
