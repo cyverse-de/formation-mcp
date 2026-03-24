@@ -1,281 +1,679 @@
 # Formation MCP
 
-Use Claude Code in your terminal to manage CyVerse Discovery Environment applications and data through natural conversation.
+[![License](https://img.shields.io/github/license/cyverse-de/formation-mcp)](LICENSE)
+[![Go](https://img.shields.io/badge/language-Go-00ADD8?logo=go)](https://golang.org/)
+[![MCP Compatible](https://img.shields.io/badge/MCP-compatible-blueviolet)](https://modelcontextprotocol.io/)
+[![CyVerse](https://img.shields.io/badge/CyVerse-Discovery%20Environment-brightgreen)](https://de.cyverse.org/)
 
-## What is this?
+**Formation MCP** connects AI coding assistants to the [CyVerse Discovery Environment](https://de.cyverse.org/) via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). It lets you launch scientific applications, manage analyses, and interact with the CyVerse Data Store — all through natural language in your AI assistant of choice, without switching to a browser.
 
-Formation MCP connects Claude Code (the AI assistant in your terminal) to the CyVerse Discovery Environment. Instead of using a web browser, you can ask Claude to:
+> Built on the [Formation API](https://github.com/cyverse-de/formation), Formation MCP exposes CyVerse's full job-launching and data-management surface as MCP tools usable from Claude Code, Claude Desktop, Cursor, VS Code Copilot, Windsurf, OpenClaw, Continue.dev, and Codex CLI.
 
-- Launch and monitor scientific applications
-- Browse and manage your data files
-- Check the status of running analyses
-- Upload and download files
+---
 
-**Example:** "Launch the Cloud Shell app with my analysis folder as input" or "What files are in my home directory?"
+## Table of Contents
 
-## Quick Start
+- [What It Does](#what-it-does)
+- [Prerequisites](#prerequisites)
+- [Installation & Build](#installation--build)
+  - [Download a Release](#download-a-release)
+  - [Build from Source](#build-from-source)
+  - [Cross-Platform Build Reference](#cross-platform-build-reference)
+- [Platform Path Reference](#platform-path-reference)
+- [Configuration](#configuration)
+- [Tool Reference](#tool-reference)
+- [AI Environment Setup](#ai-environment-setup)
+- [Example Prompts](#example-prompts)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
 
-### 1. Get Formation MCP
+---
 
-Download the latest version for your platform:
-- **macOS/Linux/Windows**: [Download from releases](https://github.com/cyverse-de/formation-mcp/releases)
+## What It Does
 
-Or build from source if you have Go installed:
+Formation MCP bridges AI assistants and the CyVerse Discovery Environment by translating MCP tool calls into Formation API requests. Once registered, your AI assistant can:
+
+- **Search and launch** any DE application with typed parameters
+- **Monitor analyses** — polling status until complete, then optionally opening the result in a browser
+- **Browse, upload, and organize** files in the CyVerse Data Store
+- **Apply metadata** to files and folders
+- **Cancel runaway jobs** without touching the web UI
+
+---
+
+## Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| CyVerse account | Free at [cyverse.org](https://cyverse.org/) |
+| Network access to CyVerse DE | Production: `https://de.cyverse.org` |
+| Go ≥ 1.21 | Only needed if building from source |
+| One supported AI client | See [AI Environment Setup](#ai-environment-setup) |
+
+---
+
+## Installation & Build
+
+### Download a Release
+
+Pre-built binaries for Linux, macOS, and Windows are available on the [Releases page](https://github.com/cyverse-de/formation-mcp/releases). Download the binary for your platform and make it executable:
+
+```bash
+# Linux / macOS
+chmod +x formation-mcp-bin
+# Optionally move to PATH
+sudo mv formation-mcp-bin /usr/local/bin/formation-mcp-bin
+```
+
+On **macOS** you may need to clear the quarantine flag after download:
+```bash
+xattr -d com.apple.quarantine formation-mcp-bin
+```
+
+On **Windows**, download `formation-mcp-bin.exe` and place it somewhere on your `%PATH%` or note the full path for config.
+
+---
+
+### Build from Source
+
+Clone and build with Go (1.21+):
+
 ```bash
 git clone https://github.com/cyverse-de/formation-mcp.git
 cd formation-mcp
-go build -o formation-mcp ./cmd/formation-mcp
 ```
 
-### 2. Set Up Your Credentials
-
-Create a configuration file at `~/.claude.json`:
-
-```json
-{
-  "mcpServers": {
-    "formation": {
-      "command": "/path/to/formation-mcp",
-      "env": {
-        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
-        "FORMATION_USERNAME": "your-cyverse-username",
-        "FORMATION_PASSWORD": "your-cyverse-password"
-      }
-    }
-  }
-}
+**Linux:**
+```bash
+go build -o formation-mcp-bin ./cmd/formation-mcp
 ```
 
-**Important:** Replace `/path/to/formation-mcp` with the actual path where you saved the binary. On Windows, use `C:\\path\\to\\formation-mcp.exe`.
+**macOS:**
+```bash
+GOOS=darwin go build -o formation-mcp-bin ./cmd/formation-mcp
+```
 
-### 3. Start Using Claude Code
+**Windows (PowerShell):**
+```powershell
+go build -o formation-mcp-bin.exe ./cmd/formation-mcp
+```
 
-Open your terminal and start Claude Code. The Formation MCP server will automatically connect, giving Claude access to your CyVerse environment.
+If you have [`just`](https://just.systems/) installed:
+```bash
+just build        # Build binary
+just test         # Run tests
+just lint         # Run linter
+just fmt          # Format code
+just check        # All checks
+just test-coverage
+```
 
-Try asking Claude:
-- "What applications are available?"
-- "List the contents of my home folder"
-- "Launch the RStudio app"
+---
 
-## What Can You Do?
+### Cross-Platform Build Reference
 
-### Work with Applications
+You can cross-compile for any target from any OS using `GOOS` and `GOARCH`:
 
-- **Find apps**: Search for available applications by name, integrator, or type
-- **Get details**: See what parameters an app requires
-- **Launch apps**: Start interactive or batch applications
-- **Monitor progress**: Check the status of running analyses
-- **Open in browser**: Automatically open interactive apps when ready
-- **Stop analyses**: Cancel running jobs
+| Target OS | `GOOS` | `GOARCH` | Output binary | Example command |
+|---|---|---|---|---|
+| Linux x86_64 | `linux` | `amd64` | `formation-mcp-bin` | `GOOS=linux GOARCH=amd64 go build -o formation-mcp-bin ./cmd/formation-mcp` |
+| Linux ARM64 | `linux` | `arm64` | `formation-mcp-bin` | `GOOS=linux GOARCH=arm64 go build -o formation-mcp-bin ./cmd/formation-mcp` |
+| macOS Intel | `darwin` | `amd64` | `formation-mcp-bin` | `GOOS=darwin GOARCH=amd64 go build -o formation-mcp-bin ./cmd/formation-mcp` |
+| macOS Apple Silicon | `darwin` | `arm64` | `formation-mcp-bin` | `GOOS=darwin GOARCH=arm64 go build -o formation-mcp-bin ./cmd/formation-mcp` |
+| Windows x86_64 | `windows` | `amd64` | `formation-mcp-bin.exe` | `GOOS=windows GOARCH=amd64 go build -o formation-mcp-bin.exe ./cmd/formation-mcp` |
 
-### Manage Your Data
+---
 
-- **Browse directories**: List files and folders in your data store
-- **Read files**: View file contents
-- **Upload files**: Add new files to your data store
-- **Create folders**: Organize your data with directories
-- **Manage metadata**: Add or update metadata on files and folders
-- **Delete items**: Remove files or directories (with dry-run preview)
+## Platform Path Reference
 
-## Configuration Options
+| Platform | Binary name | MCP client config location |
+|---|---|---|
+| **Linux** | `formation-mcp-bin` | `~/.claude.json` · `~/.cursor/mcp.json` · `~/.continue/config.json` |
+| **macOS** | `formation-mcp-bin` | `~/Library/Application Support/Claude/claude_desktop_config.json` · `~/.cursor/mcp.json` |
+| **Windows** | `formation-mcp-bin.exe` | `%APPDATA%\Claude\claude_desktop_config.json` · `%USERPROFILE%\.cursor\mcp.json` |
 
-Formation MCP can be configured three ways (in order of priority):
+Standalone Formation config (all platforms):
 
-### Option 1: Claude Code Config File (Recommended)
+| Platform | Config file |
+|---|---|
+| Linux / macOS | `~/.formation-mcp.yaml` |
+| Windows | `%USERPROFILE%\.formation-mcp.yaml` |
 
-Edit `~/.claude.json` and add the Formation MCP server as shown in Quick Start above.
+---
 
-### Option 2: Standalone Config File
+## Configuration
 
-Create `~/.formation-mcp.yaml`:
+Formation MCP reads credentials from three sources (highest to lowest priority):
+
+### Option 1 — Standalone YAML (Recommended)
+
+Create `~/.formation-mcp.yaml` (Linux/macOS) or `%USERPROFILE%\.formation-mcp.yaml` (Windows):
 
 ```yaml
 base_url: https://de.cyverse.org/formation
-username: your-username
-password: your-password
-log_level: info
-poll_interval: 5  # seconds between status checks
+username: your-cyverse-username
+password: your-cyverse-password
+log_level: info        # debug | info | warn | error
+poll_interval: 5       # seconds between status-check polls
 ```
 
-### Option 3: Environment Variables
+> **Tip:** Using this file keeps credentials out of your AI client config entirely.
+
+### Option 2 — Environment Variables
 
 ```bash
 export FORMATION_BASE_URL="https://de.cyverse.org/formation"
 export FORMATION_USERNAME="your-username"
 export FORMATION_PASSWORD="your-password"
-export LOG_LEVEL="info"  # debug, info, warn, error
+# OR use a JWT token instead of username/password:
+export FORMATION_TOKEN="your-jwt-token"
+export LOG_LEVEL="info"
 ```
 
-## Troubleshooting
+### Option 3 — Inline in AI Client Config
 
-### "Authentication failed" or "Login failed"
+Credentials can be passed directly in the `env` block of each client's config (shown in each platform section below). Useful for quick setups, but less secure than a separate YAML file.
 
-- Check that your CyVerse username and password are correct
-- Verify the FORMATION_BASE_URL matches your environment:
-  - Production: `https://de.cyverse.org/formation`
-  - QA: `https://qa.cyverse.org/formation`
+---
 
-### "Connection refused" or "Cannot connect"
+## Tool Reference
 
-- Make sure you have internet access
-- Verify the Formation URL is accessible from your network
-- Check that the URL starts with `https://`
+| Tool | Description | Key Parameters |
+|---|---|---|
+| `list_apps` | Search or list available DE applications | `search` (optional keyword), `limit` |
+| `get_app_parameters` | Get required/optional parameters for a specific app | `app_id`, `system_id` |
+| `launch_app_and_wait` | Launch a DE app and poll until ready/complete | `app_id`, `system_id`, `job_name`, `inputs`, `parameters` |
+| `get_analysis_status` | Check status of a running analysis | `analysis_id` |
+| `list_running_analyses` | List all currently running analyses | — |
+| `stop_analysis` | Cancel/stop a running analysis | `analysis_id` |
+| `open_in_browser` | Open an interactive app URL in the browser | `analysis_id` |
+| `browse_data` | List files and folders in CyVerse Data Store | `path` |
+| `create_directory` | Create a new directory in Data Store | `path` |
+| `upload_file` | Upload a local file to Data Store | `local_path`, `remote_path` |
+| `set_metadata` | Add or update metadata on a file or folder | `path`, `attribute`, `value`, `unit` |
+| `delete_data` | Delete a file or directory (supports dry-run) | `path`, `dry_run` |
 
-### Claude doesn't see Formation tools
+---
 
-- Confirm the `command` path in `~/.claude.json` points to the correct binary location
-- Try running the binary directly to ensure it's executable: `./formation-mcp --help`
-- On macOS/Linux, you may need to make it executable: `chmod +x formation-mcp`
-- Restart Claude Code after changing the configuration
+## AI Environment Setup
 
-### Apps or analyses aren't working
+> **Prerequisite for all clients:** Build or download `formation-mcp-bin` and note its absolute path.
+> If you use `~/.formation-mcp.yaml`, you can omit the `env` block from any config below.
 
-- Check you have permission to access the app or data
-- For detailed error information, set `LOG_LEVEL="debug"` in your configuration
-- Look for error messages in Claude's output
+---
 
-## Example Workflows
+<details>
+<summary><strong>Claude Code (CLI)</strong></summary>
 
-### Launch an Analysis
+Claude Code reads MCP servers from `~/.claude.json`. Add a `mcpServers` entry:
 
-```
-You: Find the Cloud Shell application
-Claude: [Shows available Cloud Shell apps]
-
-You: Launch the main Cloud Shell with my analysis folder as input
-Claude: [Launches app and provides analysis ID]
-
-You: Open it in my browser when it's ready
-Claude: [Monitors status and opens browser when ready]
-```
-
-### Manage Data
-
-```
-You: What's in my home folder?
-Claude: [Lists directories and files]
-
-You: Show me the contents of the analyses folder
-Claude: [Displays directory contents]
-
-You: Create a new folder called "project-2025"
-Claude: [Creates the directory]
-```
-
-## Advanced Configuration
-
-### Using a Pre-obtained Token
-
-If you have a JWT token instead of username/password:
-
+**Linux/macOS** (`~/.claude.json`):
 ```json
 {
   "mcpServers": {
     "formation": {
-      "command": "/path/to/formation-mcp",
+      "command": "/usr/local/bin/formation-mcp-bin",
+      "args": [],
       "env": {
         "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
-        "FORMATION_TOKEN": "your-jwt-token-here"
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
       }
     }
   }
 }
 ```
 
-### Custom Poll Interval
-
-Control how often Formation MCP checks analysis status (default: 5 seconds):
-
-```yaml
-poll_interval: 10  # Check every 10 seconds
+**Windows** (`%USERPROFILE%\.claude.json`):
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "C:\\tools\\formation-mcp-bin.exe",
+      "args": [],
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
 ```
 
-### Debug Logging
+Restart Claude Code after editing. Verify with: `claude mcp list`
 
-Enable detailed logging to troubleshoot issues:
+</details>
+
+---
+
+<details>
+<summary><strong>Claude Desktop</strong></summary>
+
+Open Claude Desktop → **Settings → Developer → Edit Config**.
+
+**macOS** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "/usr/local/bin/formation-mcp-bin",
+      "args": [],
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+**Windows** (`%APPDATA%\Claude\claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "C:\\tools\\formation-mcp-bin.exe",
+      "args": [],
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+Fully quit and relaunch Claude Desktop. You should see a hammer 🔨 icon indicating MCP tools are loaded.
+
+> If you use `~/.formation-mcp.yaml`, omit the `env` block entirely.
+
+</details>
+
+---
+
+<details>
+<summary><strong>VS Code with GitHub Copilot</strong></summary>
+
+Create `.vscode/mcp.json` in your workspace root (or add to user `settings.json` under `mcp.servers`):
+
+```json
+{
+  "servers": {
+    "formation": {
+      "type": "stdio",
+      "command": "/usr/local/bin/formation-mcp-bin",
+      "args": [],
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+**Windows:**
+```json
+{
+  "servers": {
+    "formation": {
+      "type": "stdio",
+      "command": "C:\\tools\\formation-mcp-bin.exe",
+      "args": [],
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+Reload VS Code. The Formation tools will appear in Copilot Chat when MCP is enabled.
+
+</details>
+
+---
+
+<details>
+<summary><strong>Cursor</strong></summary>
+
+Edit `~/.cursor/mcp.json` (Linux/macOS) or `%USERPROFILE%\.cursor\mcp.json` (Windows):
+
+**Linux/macOS:**
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "/usr/local/bin/formation-mcp-bin",
+      "args": []
+    }
+  }
+}
+```
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "C:\\tools\\formation-mcp-bin.exe",
+      "args": []
+    }
+  }
+}
+```
+
+> Use `~/.formation-mcp.yaml` or environment variables to supply credentials; Cursor's MCP config doesn't have an `env` field in all versions.
+
+Restart Cursor after saving.
+
+</details>
+
+---
+
+<details>
+<summary><strong>Windsurf / Codeium</strong></summary>
+
+Edit `~/.codeium/windsurf/mcp_config.json` (Linux/macOS) or `%USERPROFILE%\.codeium\windsurf\mcp_config.json` (Windows):
+
+**Linux/macOS:**
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "/usr/local/bin/formation-mcp-bin",
+      "args": [],
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "command": "C:\\tools\\formation-mcp-bin.exe",
+      "args": [],
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+Restart Windsurf to apply.
+
+</details>
+
+---
+
+<details>
+<summary><strong>OpenClaw</strong></summary>
+
+OpenClaw uses the same `~/.claude.json` format as Claude Code. Add to the `mcpServers` object:
+
+```json
+{
+  "mcpServers": {
+    "formation": {
+      "type": "stdio",
+      "command": "/usr/local/bin/formation-mcp-bin",
+      "env": {
+        "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+        "FORMATION_USERNAME": "your-username",
+        "FORMATION_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+Alternatively, use the `mcporter` CLI:
+```bash
+mcporter config add formation --command /usr/local/bin/formation-mcp-bin
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>Continue.dev</strong></summary>
+
+Edit `~/.continue/config.json` and add under `experimental.modelContextProtocolServers`:
+
+```json
+{
+  "experimental": {
+    "modelContextProtocolServers": [
+      {
+        "transport": {
+          "type": "stdio",
+          "command": "/usr/local/bin/formation-mcp-bin",
+          "args": [],
+          "env": {
+            "FORMATION_BASE_URL": "https://de.cyverse.org/formation",
+            "FORMATION_USERNAME": "your-username",
+            "FORMATION_PASSWORD": "your-password"
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+**Windows:**
+```json
+{
+  "experimental": {
+    "modelContextProtocolServers": [
+      {
+        "transport": {
+          "type": "stdio",
+          "command": "C:\\tools\\formation-mcp-bin.exe",
+          "args": []
+        }
+      }
+    ]
+  }
+}
+```
+
+Reload VS Code / your editor after saving.
+
+</details>
+
+---
+
+<details>
+<summary><strong>Codex CLI (OpenAI)</strong></summary>
+
+[Codex CLI](https://github.com/openai/codex) supports MCP via `~/.codex/config.toml` (Linux/macOS) or `%USERPROFILE%\.codex\config.toml` (Windows).
+
+Add an `[[mcp_servers]]` entry:
+
+**Linux/macOS** (`~/.codex/config.toml`):
+```toml
+[[mcp_servers]]
+name = "formation"
+command = "/usr/local/bin/formation-mcp-bin"
+args = []
+
+[mcp_servers.env]
+FORMATION_BASE_URL = "https://de.cyverse.org/formation"
+FORMATION_USERNAME = "your-username"
+FORMATION_PASSWORD = "your-password"
+```
+
+**Windows** (`%USERPROFILE%\.codex\config.toml`):
+```toml
+[[mcp_servers]]
+name = "formation"
+command = "C:\\tools\\formation-mcp-bin.exe"
+args = []
+
+[mcp_servers.env]
+FORMATION_BASE_URL = "https://de.cyverse.org/formation"
+FORMATION_USERNAME = "your-username"
+FORMATION_PASSWORD = "your-password"
+```
+
+> **Note:** The OpenAI ChatGPT desktop app does not currently support MCP natively. Codex CLI does.
+
+</details>
+
+---
+
+## Example Prompts
+
+These natural-language prompts work once Formation MCP is connected to your assistant:
+
+```
+What QGIS or RStudio applications are available in the Discovery Environment?
+```
+
+```
+Launch the Cloud Shell app and wait until it's ready, then open it in my browser.
+```
+
+```
+What analyses do I have running right now?
+```
+
+```
+Check the status of analysis 8a3f2b10-abc1-4def-9012-abcdef012345.
+```
+
+```
+Show me what's in my /iplant/home/myusername/projects folder.
+```
+
+```
+Create a directory at /iplant/home/myusername/projects/new-experiment.
+```
+
+```
+Upload /home/me/data/sample.csv to /iplant/home/myusername/projects/new-experiment/.
+```
+
+```
+Add metadata to /iplant/home/myusername/data/results.csv — attribute "experiment", value "run-42".
+```
+
+```
+Stop the analysis named "overnight-blast-job" if it's still running.
+```
+
+```
+Delete /iplant/home/myusername/scratch/old-test — but do a dry run first so I can see what would be removed.
+```
+
+---
+
+## Troubleshooting
+
+### Authentication failed / Login failed
+
+- Verify your CyVerse username and password at [user.cyverse.org](https://user.cyverse.org/)
+- Check `FORMATION_BASE_URL` matches your target environment:
+  - Production: `https://de.cyverse.org/formation`
+  - QA: `https://qa.cyverse.org/formation`
+- If using a token, ensure it hasn't expired
+
+### Connection refused / Cannot connect
+
+- Confirm you have internet access and the Formation URL is reachable
+- Check that the URL begins with `https://`
+
+### Claude / AI client doesn't see Formation tools
+
+- Confirm the `command` path in config points to the correct binary and it exists
+- Verify the binary is executable: `ls -l /usr/local/bin/formation-mcp-bin`
+- Test the binary directly: `formation-mcp-bin --help`
+- macOS: check quarantine: `xattr -l formation-mcp-bin` (clear with `xattr -d com.apple.quarantine formation-mcp-bin`)
+- Restart the AI client fully after any config change
+
+### Debug logging
+
+Enable verbose output to diagnose API errors:
 
 ```bash
 export LOG_LEVEL="debug"
 ```
 
-Or in your config file:
+Or in `~/.formation-mcp.yaml`:
 ```yaml
 log_level: debug
 ```
 
-## Platform Support
+### Analysis stuck / never completes
 
-Formation MCP runs on:
-- macOS (Intel and Apple Silicon)
-- Linux (x86_64, arm64)
-- Windows (x86_64)
+- Increase `poll_interval` in your YAML if the DE is under load
+- Use `get_analysis_status` directly to check state
+- Use `stop_analysis` to cancel a hung job
 
-## For Developers
+---
 
-### Building from Source
-
-Requirements:
-- Go 1.25.3 or later
-- Optional: `just` command runner
-
-```bash
-# Build
-go build -o formation-mcp ./cmd/formation-mcp
-
-# Run tests
-go test ./...
-
-# With just
-just build
-just test
-```
-
-### Project Structure
+## Project Structure
 
 ```
 formation-mcp/
-├── cmd/formation-mcp/      # Main application entry point
+├── cmd/formation-mcp/       # Main application entry point
 ├── internal/
-│   ├── client/             # Formation API HTTP client
-│   ├── config/             # Configuration management
-│   ├── logging/            # Structured logging
-│   ├── server/             # MCP server implementation
-│   └── workflows/          # High-level workflow operations
+│   ├── client/              # Formation API HTTP client
+│   ├── config/              # Configuration (YAML + env parsing)
+│   ├── logging/             # Structured logging
+│   ├── server/              # MCP server and tool definitions
+│   └── workflows/           # High-level multi-step operations
+├── API_COVERAGE_ANALYSIS.md # Formation API surface coverage notes
+├── justfile                 # Task runner (optional)
+└── LICENSE
 ```
 
-### Development Tasks
+See [API_COVERAGE_ANALYSIS.md](API_COVERAGE_ANALYSIS.md) for details on which Formation API endpoints are implemented.
 
-If you have `just` installed:
-
-```bash
-just build          # Build binary
-just test           # Run tests
-just test-coverage  # Run tests with coverage
-just lint           # Run linter
-just fmt            # Format code
-just check          # Run all checks
-```
-
-### API Coverage
-
-See [API_COVERAGE_ANALYSIS.md](API_COVERAGE_ANALYSIS.md) for details on which Formation API features are implemented.
+---
 
 ## Contributing
 
-Contributions welcome! Please:
+Contributions are welcome!
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run `go test ./...` to verify tests pass
+2. Create a feature branch: `git checkout -b feature/my-tool`
+3. Make changes and run `go test ./...`
+4. Run `go vet ./...` and `golangci-lint run` (if available)
 5. Submit a pull request
+
+Please open an issue first for significant changes.
+
+---
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/cyverse-de/formation-mcp/issues)
-- **CyVerse**: https://cyverse.org/
-- **Documentation**: https://learning.cyverse.org/
+- **Issues:** [GitHub Issues](https://github.com/cyverse-de/formation-mcp/issues)
+- **CyVerse:** [cyverse.org](https://cyverse.org/)
+- **CyVerse Learning:** [learning.cyverse.org](https://learning.cyverse.org/)
+- **MCP Specification:** [modelcontextprotocol.io](https://modelcontextprotocol.io/)
+
+---
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+See [LICENSE](LICENSE) for details.

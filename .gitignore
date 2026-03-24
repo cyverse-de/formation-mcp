@@ -1,4 +1,4 @@
-# Python-generated files
+# Python-generated files (scaffolding remnant)
 __pycache__/
 *.py[oc]
 build/
@@ -8,6 +8,18 @@ wheels/
 
 # Virtual environments
 .venv
-formation-mcp
-formation-mcp.yml
-formation-mcp.yaml
+
+# Formation MCP compiled binaries
+formation-mcp-bin
+formation-mcp-bin.exe
+
+# Standard Go ignores
+*.exe
+*.test
+*.out
+/vendor/
+coverage.out
+
+# Secrets / local config — use *-secrets.yaml for files with credentials;
+# do NOT commit ~/.formation-mcp.yaml into the repo.
+*-secrets.yaml
